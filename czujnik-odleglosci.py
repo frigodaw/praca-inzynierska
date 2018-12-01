@@ -21,47 +21,40 @@ servo.start(0)
 #parametry sterowania
 dt = 0.01
 demand_distance = 15
-buffer = []
 
 	
-def distance():
-	GPIO.output(GPIO_TRIGGER, True)
-	time.sleep(0.00001)					#0.01ms
-	GPIO.output(GPIO_TRIGGER, False)
-
-	StartTime = time.time()
-	StopTime = time.time()
-
-	while GPIO.input(GPIO_ECHO) == 0:
-		StartTime = time.time()
-
-	while GPIO.input(GPIO_ECHO) == 1:
-		StopTime = time.time()
-	TimeElapsed = StopTime - StartTime
-	distance = (TimeElapsed * 34300) / 2
-	return distance
-
-
-
-
-def meanDistance(n, buffer):
+def distance():		#dodac odchylenie standardowe i wykluczanie danych
+	n = 5			#ilosc elementow do liczenia sredniej
 	total = 0
-	for i in range(0,n):
-		buffer.append(distance())
+	buffer = []
+	
+	for i in range(0, n):
+		GPIO.output(GPIO_TRIGGER, True)
+		time.sleep(0.00001)					#0.01ms
+		GPIO.output(GPIO_TRIGGER, False)
+		StartTime = time.time()
+		StopTime = time.time()
+		
+		while GPIO.input(GPIO_ECHO) == 0:
+			StartTime = time.time()
+
+		while GPIO.input(GPIO_ECHO) == 1:
+			StopTime = time.time()
+		TimeElapsed = StopTime - StartTime
+		distance = (TimeElapsed * 34300) / 2
+		buffer.append(distance)
 		total += buffer[i]
-		#print("%d: %.3f" %(i, buffer[i]))
 		time.sleep(0.02)	#50Hz
-	return total/n
+	mean = total/n	
+	return mean
 	
-	
-	
+
 if __name__ == '__main__':
 	try:
 		
 		while True:
-			#dist = distance()
-			#print ("Measured Distance = %.3f cm" % dist)
-			dist = meanDistance(5,buffer)
+			
+			dist = distance()
 			print("Odleglosc %.3f" %dist)
 
 			if (dist > demand_distance + 2):
@@ -71,7 +64,6 @@ if __name__ == '__main__':
 			else:
 				servo.ChangeDutyCycle(0)
 			
-			buffer.clear()
 			time.sleep(0.1)
 			
  

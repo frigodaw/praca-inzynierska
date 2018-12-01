@@ -12,14 +12,6 @@ def radToDeg(stopnie):
 	
 def fiToPWM(stopnie):  
 	return 5/180*stopnie+5
-
-def d3ToPWM(odleglosc): #regulator
-    return odleglosc
-
-def borderControl(kat1, kat3, dlugosc3, kat1_min, kat1_max, kat3_min, kat3_max, dlugosc3_min, dlugosc3_max):
-	if (kat1 < kat1_min) or (kat1 > kat1_max) or (kat3 < kat3_min) or (kat3 > kat3_max) or (dlugosc3 < dlugosc3_min) or (dlugosc3 > dlugosc3_max):
-		return -1		#przekroczenie wartosci
-	else: return 1		#wartosc poprawna
 	
 def channelSetup(channel_XYZ, channel_JOINT):		
 	if GPIO.input(channel_XYZ) == GPIO.LOW:
@@ -31,7 +23,6 @@ def channelSetup(channel_XYZ, channel_JOINT):
 	else:
 		print("Domyslny tryb pracy: JOINT")
 		return 'JOINT'
-		#return operating_mode(channel_XYZ, channel_JOINT) ???
 
 class NotacjaDH:
 
@@ -60,14 +51,6 @@ class NotacjaDH:
 		self.rX = np.array([[1,0,0,0], [0,math.cos(self.alfa),-math.sin(self.alfa),0], [0,math.sin(self.alfa),math.cos(self.alfa),0], [0,0,0,1]])
 
 class Kinematyka:
-  
-	#WARUNKI KRANCOWE
-	fi1_min = 5		#deg
-	fi1_max = 175	#deg
-	fi3_min = 5		#deg
-	fi3_max = 175	#deg
-	d3_min = 40		#mm
-	d3_max = 130	#mm
 	
 	def __init__(self, fi1, fi2, fi3, l1, l2, d3, l4, tryb_pracy):
 		self.fi1 = fi1
@@ -84,7 +67,7 @@ class Kinematyka:
 			
 		serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
 		serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-		serwo3.ChangeDutyCycle(d3ToPWM(self.d3))     #to musi byc regulowane
+		serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
 		
 	def kinematykaProsta(self, fi1, fi3, d3):
 		try:
@@ -116,7 +99,7 @@ class Kinematyka:
 		self.fi3_mem = self.fi3
 		self.d3_mem = self.d3
 
-		self.fi1 = math.atan(self.Y/self.X)
+		self.fi1 = math.atan2(self.Y,self.X)
 		a = self.l2*math.cos(degToRad(self.fi2))
 		b = self.Z-self.l1-self.l2*math.sin(degToRad(self.fi2))
 		self.fi3 = math.pi/2-math.atan(self.X/(b*math.cos(self.fi1))-a/b)
@@ -128,6 +111,11 @@ class Kinematyka:
 		print("fi1: %.4f" %self.fi1)
 		print("fi3: %.4f" %self.fi3)
 		print("d3: %.4f" %self.d3)
+
+	def zakresCzlonow(self, kat1, kat3, dlugosc3, kat1_min, kat1_max, kat3_min, kat3_max, dlugosc3_min, dlugosc3_max):
+		if (kat1 < kat1_min) or (kat1 > kat1_max) or (kat3 < kat3_min) or (kat3 > kat3_max) or (dlugosc3 < dlugosc3_min) or (dlugosc3 > dlugosc3_max):
+			return -1		#przekroczenie wartosci
+		else: return 1		#wartosc poprawna
 		
 	def sterowanieXYZ(self):
 		print("X: %.4f" %self.X )
@@ -135,7 +123,7 @@ class Kinematyka:
 		print("Z: %.4f" %self.Z )
 		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
 				
-		if borderControl(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
+		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
@@ -150,7 +138,7 @@ class Kinematyka:
 			print("Wyslano sygnaly sterujace")
 			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
 			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-			serwo3.ChangeDutyCycle(d3ToPWM(self.d3))     #to musi byc regulowane
+			serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
             #while (d3_rzeczywiste > (self.d3+3)) and (d3_rzeczywiste < (self.d3-3))
                 #if d3_rzeczywiste > (self.d3+3):
                     #serwo3.ChangeDutyCycle(WARTOSC_TYL)
@@ -163,7 +151,7 @@ class Kinematyka:
 		print("d3: %.4f" %self.d3)
 		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
 		
-		if borderControl(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
+		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
@@ -178,33 +166,47 @@ class Kinematyka:
 			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
 			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
 			print("Wypelnienie dla fi3: %.4f" %fiToPWM(self.fi3))
-			serwo3.ChangeDutyCycle(d3ToPWM(self.d3))     #to musi byc regulowane
+			serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
 			print("Wyslano sygnaly sterujace")
+
+#GPIO PINOUT BCM
+GPIO_X_UP = 4
+GPIO_X_DOWN = 17
+GPIO_Y_UP = 27
+GPIO_Y_DOWN = 22
+GPIO_Z_UP = 10
+GPIO_Z_DOWN = 9
+GPIO_XYZ = 11
+GPIO_JOINT = 0
+GPIO_LED = 5
+GPIO_SERVO1 = 16
+GPIO_SERVO2 = 20
+GPIO_SERVO3 = 21
 
 #KONFIGURACJA WEJSC I WYJSC
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
-GPIO.setup(4, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek X up
-GPIO.setup(17, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek X down
-GPIO.setup(27, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Y up
-GPIO.setup(22, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Y down
-GPIO.setup(10, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z up
-GPIO.setup(9, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z down
-GPIO.setup(11, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#sterowanie XYZ
-GPIO.setup(0, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#sterowanie JOINT
-GPIO.setup(5, GPIO.OUT)	    #LED pozycji skrajnej
-GPIO.setup(16, GPIO.OUT)	#serwo1: podstawa
-GPIO.setup(20, GPIO.OUT)	#serwo2: ramie
-GPIO.setup(21, GPIO.OUT)	#serwo3: 360 teleskop
+GPIO.setup(GPIO_X_UP, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek X up
+GPIO.setup(GPIO_X_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek X down
+GPIO.setup(GPIO_Y_UP, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Y up
+GPIO.setup(GPIO_Y_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Y down
+GPIO.setup(GPIO_Z_UP, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z up
+GPIO.setup(GPIO_Z_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z down
+GPIO.setup(GPIO_XYZ, GPIO.IN, pull_up_down=GPIO.PUD_UP)			#sterowanie XYZ
+GPIO.setup(GPIO_JOINT, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#sterowanie JOINT
+GPIO.setup(GPIO_LED, GPIO.OUT)	    							#LED pozycji skrajnej
+GPIO.setup(GPIO_SERVO1, GPIO.OUT)								#serwo1: podstawa
+GPIO.setup(GPIO_SERVO2, GPIO.OUT)								#serwo2: ramie
+GPIO.setup(GPIO_SERVO3, GPIO.OUT)								#serwo3: 360 teleskop
 
-dioda_alarm = GPIO.PWM(5, 1)
-serwo1 = GPIO.PWM(16, 50)
-serwo2 = GPIO.PWM(20, 50)
-serwo3 = GPIO.PWM(21, 50)
+dioda_alarm = GPIO.PWM(GPIO_LED, 1)
+serwo1 = GPIO.PWM(GPIO_SERVO1, 50)
+serwo2 = GPIO.PWM(GPIO_SERVO2, 50)
+serwo3 = GPIO.PWM(GPIO_SERVO3, 50)
 
 #PARAMETRY STARTOWE VAR
-fi1 = 30	#deg
-fi3 = 45	#deg
+fi1 = 0		#deg
+fi3 = 30	#deg
 d3 = 50 	#mm
 
 #POZOSTALE WYMIARY CZLONOW
@@ -220,12 +222,12 @@ serwo2.start(fiToPWM(fi3))
 serwo3.start(0)		#regulacja
 
 #WARUNKI KRANCOWE
-fi1_min = 5		#deg
-fi1_max = 35	#deg
-fi3_min = 5		#deg
-fi3_max = 175	#deg
+fi1_min = -85	#deg
+fi1_max = 85	#deg
+fi3_min = 0		#deg
+fi3_max = 70	#deg
 d3_min = 40		#mm
-d3_max = 90		#mm
+d3_max = 120	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
 dx = 5		#mm
@@ -341,18 +343,18 @@ def callbackModeJOINT(channel):
 		print("Tryb JOINT: OFF")
 
 #KONFIGURACJA PRZERWAN
-GPIO.add_event_detect(4, GPIO.FALLING, callback=callback_upX_upF1, bouncetime=btime)	
-GPIO.add_event_detect(17, GPIO.FALLING, callback=callback_downX_downF1, bouncetime=btime)
-GPIO.add_event_detect(27, GPIO.FALLING, callback=callback_upY_upF3, bouncetime=btime)
-GPIO.add_event_detect(22, GPIO.FALLING, callback=callback_downY_downF3, bouncetime=btime)	
-GPIO.add_event_detect(10, GPIO.FALLING, callback=callback_upZ_upD3, bouncetime=btime)
-GPIO.add_event_detect(9, GPIO.FALLING, callback=callback_downZ_downD3, bouncetime=btime)
-GPIO.add_event_detect(11, GPIO.RISING, callback=callbackModeXYZ, bouncetime=btime)
-GPIO.add_event_detect(0, GPIO.FALLING, callback=callbackModeJOINT, bouncetime=btime)
+GPIO.add_event_detect(GPIO_X_UP, GPIO.FALLING, callback=callback_upX_upF1, bouncetime=btime)	
+GPIO.add_event_detect(GPIO_X_DOWN, GPIO.FALLING, callback=callback_downX_downF1, bouncetime=btime)
+GPIO.add_event_detect(GPIO_Y_UP, GPIO.FALLING, callback=callback_upY_upF3, bouncetime=btime)
+GPIO.add_event_detect(GPIO_Y_DOWN, GPIO.FALLING, callback=callback_downY_downF3, bouncetime=btime)	
+GPIO.add_event_detect(GPIO_Z_UP, GPIO.FALLING, callback=callback_upZ_upD3, bouncetime=btime)
+GPIO.add_event_detect(GPIO_Z_DOWN, GPIO.FALLING, callback=callback_downZ_downD3, bouncetime=btime)
+GPIO.add_event_detect(GPIO_XYZ, GPIO.RISING, callback=callbackModeXYZ, bouncetime=btime)
+GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, bouncetime=btime)
 
 	
 #POCZATEK WYKONYWANEGO PROGRAMU
-print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta) a nastepnie sprawdzana jest poprawnosc obliczen  (kinematyka odwrotna). \n")
+print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
 chwytak = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
 sleep(1)

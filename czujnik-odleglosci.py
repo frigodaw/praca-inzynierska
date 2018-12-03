@@ -8,63 +8,64 @@ GPIO.setwarnings(False)
 #set GPIO Pins
 GPIO_TRIGGER =  1
 GPIO_ECHO = 7
-GPIO_SERVO = 20
+GPIO_SERVO = 21
 
 #GPIO setup
 GPIO.setup(GPIO_TRIGGER, GPIO.OUT)
 GPIO.setup(GPIO_ECHO, GPIO.IN)
 GPIO.setup(GPIO_SERVO, GPIO.OUT)
 
-servo = GPIO.PWM(GPIO_SERVO, 50)
-servo.start(0)
+serwo3 = GPIO.PWM(GPIO_SERVO, 50)
+serwo3.start(0)
 
 #parametry sterowania
 dt = 0.01
-demand_distance = 15
 
 	
-def distance():		#dodac odchylenie standardowe i wykluczanie danych
-	n = 5			#ilosc elementow do liczenia sredniej
+def distance(demand_distance):			#dlugosc do przejechania
+	n = 10								#ilosc elementow do liczenia sredniej
 	total = 0
+	d3_position = 0
 	buffer = []
 	
-	for i in range(0, n):
-		GPIO.output(GPIO_TRIGGER, True)
-		time.sleep(0.00001)					#0.01ms
-		GPIO.output(GPIO_TRIGGER, False)
-		StartTime = time.time()
-		StopTime = time.time()
+	while (d3_position > demand_distance + 2) or (d3_position < demand_distance - 2):
 		
-		while GPIO.input(GPIO_ECHO) == 0:
+		for i in range(0, n):
+			GPIO.output(GPIO_TRIGGER, True)
+			time.sleep(0.00001)					#0.01ms
+			GPIO.output(GPIO_TRIGGER, False)
 			StartTime = time.time()
-
-		while GPIO.input(GPIO_ECHO) == 1:
 			StopTime = time.time()
-		TimeElapsed = StopTime - StartTime
-		distance = (TimeElapsed * 34300) / 2
-		buffer.append(distance)
-		total += buffer[i]
-		time.sleep(0.02)	#50Hz
-	mean = total/n	
-	return mean
-	
+
+			while GPIO.input(GPIO_ECHO) == 0:
+				StartTime = time.time()
+
+			while GPIO.input(GPIO_ECHO) == 1:
+				StopTime = time.time()
+			TimeElapsed = StopTime - StartTime
+			distance = (TimeElapsed * 343000) / 2	#[mm]
+			buffer.append(distance)
+			total += buffer[i]
+			time.sleep(0.02)	#50Hz
+		d3_position = total/n
+		buffer.clear()
+		total = 0
+		
+		print("Odleglosc %.3f" %d3_position)
+		if (d3_position > demand_distance + 2):
+			serwo3.ChangeDutyCycle(1)
+		elif (d3_position < demand_distance - 2):
+			serwo3.ChangeDutyCycle(10)	
+		else:
+			serwo3.ChangeDutyCycle(0)
+		
 
 if __name__ == '__main__':
 	try:
 		
 		while True:
 			
-			dist = distance()
-			print("Odleglosc %.3f" %dist)
-
-			if (dist > demand_distance + 2):
-				servo.ChangeDutyCycle(1)
-			elif (dist < demand_distance - 2):
-				servo.ChangeDutyCycle(10)	
-			else:
-				servo.ChangeDutyCycle(0)
-			
-			time.sleep(0.1)
+			distance(100)
 			
  
         # Reset by pressing CTRL + C

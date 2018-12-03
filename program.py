@@ -2,6 +2,7 @@ import numpy as np				#biblioteka macierzy
 import math
 import RPi.GPIO as GPIO
 import sys
+import threading
 from time import *
 
 def degToRad(stopnie):
@@ -23,6 +24,31 @@ def channelSetup(channel_XYZ, channel_JOINT):
 	else:
 		print("Domyslny tryb pracy: JOINT")
 		return 'JOINT'
+	
+def distance():		#dlugosc do przejechania
+	n = 5			#ilosc elementow do liczenia sredniej
+	total = 0
+	buffer = []
+	meanD3 = 0
+
+	for i in range(0, n):
+		GPIO.output(GPIO_TRIGGER, True)
+		sleep(0.00001)					#0.01ms
+		GPIO.output(GPIO_TRIGGER, False)
+		StartTime = time()
+		StopTime = time()
+
+		while GPIO.input(GPIO_ECHO) == 0:
+			StartTime = time()
+
+		while GPIO.input(GPIO_ECHO) == 1:
+			StopTime = time()
+		TimeElapsed = StopTime - StartTime
+		distance = (TimeElapsed * 343000) / 2	#[mm]
+		buffer.append(distance)
+		total += buffer[i]
+		sleep(0.02)	#50Hz
+	return total/n
 
 class NotacjaDH:
 
@@ -50,6 +76,7 @@ class NotacjaDH:
 	def rotX(self):
 		self.rX = np.array([[1,0,0,0], [0,math.cos(self.alfa),-math.sin(self.alfa),0], [0,math.sin(self.alfa),math.cos(self.alfa),0], [0,0,0,1]])
 
+		
 class Kinematyka:
 	
 	def __init__(self, fi1, fi2, fi3, l1, l2, d3, l4, tryb_pracy):
@@ -116,7 +143,7 @@ class Kinematyka:
 		if (kat1 < kat1_min) or (kat1 > kat1_max) or (kat3 < kat3_min) or (kat3 > kat3_max) or (dlugosc3 < dlugosc3_min) or (dlugosc3 > dlugosc3_max):
 			return -1		#przekroczenie wartosci
 		else: return 1		#wartosc poprawna
-		
+				
 	def sterowanieXYZ(self):
 		print("X: %.4f" %self.X )
 		print("Y: %.4f" %self.Y )
@@ -136,14 +163,11 @@ class Kinematyka:
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
 			print("Wyslano sygnaly sterujace")
+			self.ruch = 1
 			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
 			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-			serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
-            #while (d3_rzeczywiste > (self.d3+3)) and (d3_rzeczywiste < (self.d3-3))
-                #if d3_rzeczywiste > (self.d3+3):
-                    #serwo3.ChangeDutyCycle(WARTOSC_TYL)
-                #elif d3_rzeczywiste < (self.d3-3):
-                    #serwo3.ChangeDutyCycle(WARTOSC_PRZOD)
+			#serwo3.ChangeDutyCycle(thread.start_new_thread(self.distance, (self.d3,)))
+			serwo3.ChangeDutyCycle(0)
 		
 	def sterowanieJOINT(self):
 		print("fi1: %.4f" %self.fi1)
@@ -166,7 +190,7 @@ class Kinematyka:
 			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
 			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
 			print("Wypelnienie dla fi3: %.4f" %fiToPWM(self.fi3))
-			serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
+			#serwo3.ChangeDutyCycle(0) 
 			print("Wyslano sygnaly sterujace")
 
 #GPIO PINOUT BCM
@@ -182,6 +206,8 @@ GPIO_LED = 5
 GPIO_SERVO1 = 16
 GPIO_SERVO2 = 20
 GPIO_SERVO3 = 21
+GPIO_TRIGGER =  1	#czujnik odleglosci
+GPIO_ECHO = 7		#czujnik odleglosci
 
 #KONFIGURACJA WEJSC I WYJSC
 GPIO.setmode(GPIO.BCM)
@@ -198,6 +224,8 @@ GPIO.setup(GPIO_LED, GPIO.OUT)	    							#LED pozycji skrajnej
 GPIO.setup(GPIO_SERVO1, GPIO.OUT)								#serwo1: podstawa
 GPIO.setup(GPIO_SERVO2, GPIO.OUT)								#serwo2: ramie
 GPIO.setup(GPIO_SERVO3, GPIO.OUT)								#serwo3: 360 teleskop
+GPIO.setup(GPIO_TRIGGER, GPIO.OUT)								#czujnik odleglosci
+GPIO.setup(GPIO_ECHO, GPIO.IN)									#czujnik odleglosci
 
 dioda_alarm = GPIO.PWM(GPIO_LED, 1)
 serwo1 = GPIO.PWM(GPIO_SERVO1, 50)
@@ -242,105 +270,98 @@ btime = 200 #bouncetime ms
 #OBSLUGA PRZERWAN OD PRZYCISKOW
 def callback_upX_upF1(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch X+")
-			chwytak.X += dx
-			chwytak.sterowanieXYZ()
+			zuraw.X += dx
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch fi1+")
-			chwytak.fi1 += dfi1
-			chwytak.sterowanieJOINT()
+			zuraw.fi1 += dfi1
+			zuraw.sterowanieJOINT()
 			sleep(dt)
 
 def callback_downX_downF1(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch X-")
-			chwytak.X -= dx
-			chwytak.sterowanieXYZ()
+			zuraw.X -= dx
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch fi1-")
-			chwytak.fi1 -= dfi1
-			chwytak.sterowanieJOINT()
+			zuraw.fi1 -= dfi1
+			zuraw.sterowanieJOINT()
 			sleep(dt)
 		
 	
 def callback_upY_upF3(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Y+")
-			chwytak.Y += dy
-			chwytak.sterowanieXYZ()
+			zuraw.Y += dy
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch fi3+")
-			chwytak.fi3 += dfi3
-			chwytak.sterowanieJOINT()
+			zuraw.fi3 += dfi3
+			zuraw.sterowanieJOINT()
 			sleep(dt)
 
 def callback_downY_downF3(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Y-")
-			chwytak.Y -= dy
-			chwytak.sterowanieXYZ()
+			zuraw.Y -= dy
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch fi3-")
-			chwytak.fi3 -= dfi3
-			chwytak.sterowanieJOINT()
+			zuraw.fi3 -= dfi3
+			zuraw.sterowanieJOINT()
 			sleep(dt)
 	
 def callback_upZ_upD3(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Z+")
-			chwytak.Z += dz
-			chwytak.sterowanieXYZ()
+			zuraw.Z += dz
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch d3+")
-			chwytak.d3 += dd3
-			chwytak.sterowanieJOINT()
+			zuraw.d3 += dd3
+			zuraw.sterowanieJOINT()
 			sleep(dt)
 
 def callback_downZ_downD3(channel):
 	while GPIO.input(channel) == GPIO.LOW:
-		if chwytak.tryb_pracy == 'XYZ':
+		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Z-")
-			chwytak.Z -= dz
-			chwytak.sterowanieXYZ()
+			zuraw.Z -= dz
+			zuraw.sterowanieXYZ()
 			sleep(dt)
 		
-		elif chwytak.tryb_pracy == 'JOINT':
+		elif zuraw.tryb_pracy == 'JOINT':
 			print("\nRuch d3-")
-			chwytak.d3 -= dd3
-			chwytak.sterowanieJOINT()
+			zuraw.d3 -= dd3
+			zuraw.sterowanieJOINT()
 			sleep(dt)	
 
 def callbackModeXYZ(channel):
-	while GPIO.input(channel) == GPIO.LOW:
-		chwytak.tryb_pracy = 'XYZ'	
-		print("Tryb XYZ: ON")
-			
-	else:
-		chwytak.tryb_pracy = 'none'
-		print("Tryb XYZ: OFF")
+	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.tryb_pracy == 'JOINT'):
+		zuraw.tryb_pracy = 'XYZ'	
+		print("Tryb pracy: XYZ")	
 
 def callbackModeJOINT(channel):
-	if GPIO.input(channel) == GPIO.LOW:
-		chwytak.tryb_pracy = 'JOINT'
-		print("Tryb JOINT: ON")
-	else:
-		chwytak.tryb_pracy = 'none'
-		print("Tryb JOINT: OFF")
+	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.tryb_pracy == 'XYZ'):
+		zuraw.tryb_pracy = 'JOINT'
+		print("Tryb pracy: JOINT")
 
 #KONFIGURACJA PRZERWAN
 GPIO.add_event_detect(GPIO_X_UP, GPIO.FALLING, callback=callback_upX_upF1, bouncetime=btime)	
@@ -349,22 +370,31 @@ GPIO.add_event_detect(GPIO_Y_UP, GPIO.FALLING, callback=callback_upY_upF3, bounc
 GPIO.add_event_detect(GPIO_Y_DOWN, GPIO.FALLING, callback=callback_downY_downF3, bouncetime=btime)	
 GPIO.add_event_detect(GPIO_Z_UP, GPIO.FALLING, callback=callback_upZ_upD3, bouncetime=btime)
 GPIO.add_event_detect(GPIO_Z_DOWN, GPIO.FALLING, callback=callback_downZ_downD3, bouncetime=btime)
-GPIO.add_event_detect(GPIO_XYZ, GPIO.RISING, callback=callbackModeXYZ, bouncetime=btime)
+GPIO.add_event_detect(GPIO_XYZ, GPIO.FALLING, callback=callbackModeXYZ, bouncetime=btime)
 GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, bouncetime=btime)
 
 	
 #POCZATEK WYKONYWANEGO PROGRAMU
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
-chwytak = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
+zuraw = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
+d3_current = distance()
 sleep(1)
 print("\nNacisnij przycisk aby poruszac manipulatorem.")	
 	
 #PETLA GLOWNA PROGRAMU
 while True:
-
-	try:
-		sleep(2)
+	try: 		
+		while (d3_current > zuraw.d3 + 2) or (d3_current < zuraw.d3 - 2):
+			d3_current = distance()
+			if (d3_current > zuraw.d3 + 2):
+				serwo3.ChangeDutyCycle(1)
+			elif (d3_current < zuraw.d3 - 2):
+				serwo3.ChangeDutyCycle(10)	
+			else:
+				serwo3.ChangeDutyCycle(0)
+				print("Odleglosc %.3f" %d3_current)
+				
 	except: KeyboardInterrupt
 
 GPIO.cleanup()

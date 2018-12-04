@@ -25,31 +25,6 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Domyslny tryb pracy: XYZ")
 		return 'XYZ'
 	
-def distance():		#dlugosc do przejechania
-	n = 5			#ilosc elementow do liczenia sredniej
-	total = 0
-	buffer = []
-	meanD3 = 0
-
-	for i in range(0, n):
-		GPIO.output(GPIO_TRIGGER, True)
-		sleep(0.00001)					#0.01ms
-		GPIO.output(GPIO_TRIGGER, False)
-		StartTime = time()
-		StopTime = time()
-
-		while GPIO.input(GPIO_ECHO) == 0:
-			StartTime = time()
-
-		while GPIO.input(GPIO_ECHO) == 1:
-			StopTime = time()
-		TimeElapsed = StopTime - StartTime
-		distance = (TimeElapsed * 343000) / 2	#[mm]
-		buffer.append(distance)
-		total += buffer[i]
-		sleep(0.02)	#50Hz
-	return total/n
-
 class NotacjaDH:
 
 	def __init__(self,fi,d,a,alfa):
@@ -193,6 +168,49 @@ class Kinematyka:
 			#serwo3.ChangeDutyCycle(0) 
 			print("Wyslano sygnaly sterujace")
 
+class NewThread(threading.Thread):
+	def __init__(self):
+		threading.Thread.__init__(self)
+		
+	def distance(self):	#dlugosc do przejechania
+		n = 5			#ilosc elementow do liczenia sredniej
+		total = 0
+		buffer = []
+
+		for i in range(0, n):
+			GPIO.output(GPIO_TRIGGER, True)
+			sleep(0.00001)					#0.01ms
+			GPIO.output(GPIO_TRIGGER, False)
+			StartTime = time()
+			StopTime = time()
+
+			while GPIO.input(GPIO_ECHO) == 0:
+				StartTime = time()
+
+			while GPIO.input(GPIO_ECHO) == 1:
+				StopTime = time()
+			TimeElapsed = StopTime - StartTime
+			distance = (TimeElapsed * 343000) / 2	#[mm]
+			buffer.append(distance)
+			total += buffer[i]
+			sleep(0.02)	#50Hz
+		return total/n
+	
+	def run(self):
+		while True:
+			d3_current = self.distance()
+						
+			while (d3_current > zuraw.d3 + 2) or (d3_current < zuraw.d3 - 2):
+				d3_current = self.distance()
+				if (d3_current > zuraw.d3 + 2):
+					serwo3.ChangeDutyCycle(1)
+				elif (d3_current < zuraw.d3 - 2):
+					serwo3.ChangeDutyCycle(10)	
+				else:
+					serwo3.ChangeDutyCycle(0)
+					print("Stop, odleglosc %.3f" %d3_current)
+	
+			
 #GPIO PINOUT BCM
 GPIO_X_UP = 4
 GPIO_X_DOWN = 17
@@ -378,23 +396,15 @@ GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, boun
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
 zuraw = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
-d3_current = distance()
+threadDistance = NewThread()
+threadDistance.start()
 sleep(1)
 print("\nNacisnij przycisk aby poruszac manipulatorem.")	
 	
 #PETLA GLOWNA PROGRAMU
 while True:
 	try: 		
-		while (d3_current > zuraw.d3 + 2) or (d3_current < zuraw.d3 - 2):
-			d3_current = distance()
-			if (d3_current > zuraw.d3 + 2):
-				serwo3.ChangeDutyCycle(1)
-			elif (d3_current < zuraw.d3 - 2):
-				serwo3.ChangeDutyCycle(10)	
-			else:
-				serwo3.ChangeDutyCycle(0)
-				print("Odleglosc %.3f" %d3_current)
-				
+		terminate()		
 	except: KeyboardInterrupt
 
 GPIO.cleanup()

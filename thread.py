@@ -3,7 +3,10 @@ import math
 import RPi.GPIO as GPIO
 import sys
 import threading
+import serial
 from time import *
+
+port = serial.Serial("/dev/ttyACM0", baudrate=9600, timeout=3.0)
 
 def degToRad(stopnie):
 	return stopnie*math.pi/180
@@ -14,6 +17,9 @@ def radToDeg(stopnie):
 def fiToPWM(stopnie):  
 	return 5/180*stopnie+5
 	
+def fi1ToPWM(stopnie):  
+	return 5/90*stopnie+5
+	
 def channelSetup(channel_XYZ, channel_JOINT):		
 	if GPIO.input(channel_XYZ) == GPIO.LOW:
 		print("Tryb: XYZ")
@@ -22,8 +28,8 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Tryb: JOINT")
 		return 'JOINT'
 	else:
-		print("Domyslny tryb pracy: XYZ")
-		return 'XYZ'
+		print("Domyslny tryb pracy: JOINT")
+		return 'JOINT'
 	
 class NotacjaDH:
 
@@ -162,7 +168,9 @@ class Kinematyka:
 			
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
-			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
+			serwo1.ChangeDutyCycle(fi1ToPWM(self.fi1))
+			port.write(str(int(round(self.fi1))).encode('ascii'))
+			print("Wypelnienie dla fi1: %.4f" %fi1ToPWM(self.fi1))
 			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
 			print("Wypelnienie dla fi3: %.4f" %fiToPWM(self.fi3))
 			#serwo3.ChangeDutyCycle(0) 
@@ -263,25 +271,27 @@ l4 = 100	#mm
 
 #URUCHOMIENIE WYJSC
 dioda_alarm.start(0)
-serwo1.start(fiToPWM(fi1))		
+serwo1.start(fi1ToPWM(fi1))	
+serwo1.ChangeDutyCycle(fi1ToPWM(fi1))	
+print("Wypelnienie dla fi1: %.4f" %fi1ToPWM(fi1))	
 serwo2.start(fiToPWM(fi3))
 serwo3.start(0)		#regulacja
 
 #WARUNKI KRANCOWE
-fi1_min = -85	#deg
-fi1_max = 85	#deg
+fi1_min = -45	#deg
+fi1_max = 45	#deg
 fi3_min = 0		#deg
 fi3_max = 70	#deg
 d3_min = 40		#mm
 d3_max = 120	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
-dx = 5		#mm
-dy = 5		#mm
-dz = 5 		#mm
-dfi1 = 5	#deg
-dfi3 = 5	#deg
-dd3 = 5		#mm
+dx = 2		#mm
+dy = 2		#mm
+dz = 2 		#mm
+dfi1 = 10	#deg
+dfi3 = 2	#deg
+dd3 = 2		#mm
 dt = 0.2	#s
 btime = 200 #bouncetime ms
 

@@ -22,8 +22,8 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Tryb: JOINT")
 		return 'JOINT'
 	else:
-		print("Domyslny tryb pracy: XYZ")
-		return 'XYZ'
+		print("Domyslny tryb pracy: JOINT")
+		return 'JOINT'
 	
 def distance():		#dlugosc do przejechania
 	n = 5			#ilosc elementow do liczenia sredniej
@@ -261,8 +261,8 @@ d3_max = 120	#mm
 dx = 5		#mm
 dy = 5		#mm
 dz = 5 		#mm
-dfi1 = 5	#deg
-dfi3 = 5	#deg
+dfi1 = 2	#deg
+dfi3 = 2	#deg
 dd3 = 5		#mm
 dt = 0.2	#s
 btime = 200 #bouncetime ms
@@ -387,13 +387,13 @@ while True:
 	try: 		
 		while (d3_current > zuraw.d3 + 2) or (d3_current < zuraw.d3 - 2):
 			d3_current = distance()
+			print("Odleglosc %.3f" %d3_current)
 			if (d3_current > zuraw.d3 + 2):
 				serwo3.ChangeDutyCycle(1)
 			elif (d3_current < zuraw.d3 - 2):
 				serwo3.ChangeDutyCycle(10)	
 			else:
 				serwo3.ChangeDutyCycle(0)
-				print("Odleglosc %.3f" %d3_current)
 				
 	except: KeyboardInterrupt
 

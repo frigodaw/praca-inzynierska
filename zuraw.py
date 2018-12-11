@@ -21,8 +21,8 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Tryb: JOINT")
 		return 'JOINT'
 	else:
-		print("Domyslny tryb pracy: XYZ")
-		return 'XYZ'
+		print("Domyslny tryb pracy: JOINT")
+		return 'JOINT'
 	
 class NotacjaDH:
 
@@ -202,7 +202,7 @@ dioda_alarm.start(0)
 #PARAMETRY STARTOWE VAR
 fi1 = 0		#deg
 fi3 = 30	#deg
-d3 = 50 	#mm
+d3 = 60 	#mm
 
 #POZOSTALE WYMIARY CZLONOW
 fi2 = 120	#deg
@@ -214,19 +214,19 @@ l4 = 100	#mm
 port = serial.Serial("/dev/arduino", baudrate=9600, timeout=2.0)
 
 #WARUNKI KRANCOWE
-fi1_min = -105	#deg
-fi1_max = 105	#deg
+fi1_min = -80	#deg
+fi1_max = 80	#deg
 fi3_min = 0		#deg
 fi3_max = 70	#deg
 d3_min = 40		#mm
 d3_max = 160	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
-dx = 2		#mm
-dy = 2		#mm
-dz = 2 		#mm
-dfi1 = 2	#deg
-dfi3 = 2	#deg
+dx = 5		#mm
+dy = 5		#mm
+dz = 5 		#mm
+dfi1 = 5	#deg
+dfi3 = 5	#deg
 dd3 = 2		#mm
 dt = 0.2	#s
 btime = 200 #bouncetime ms
@@ -350,7 +350,7 @@ print("\nNacisnij przycisk aby poruszac manipulatorem.")
 #PETLA GLOWNA PROGRAMU
 while True:
 	try: 		
-		sleep(0.5)
+		pass
 	except: KeyboardInterrupt
 
 GPIO.cleanup()

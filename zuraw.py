@@ -6,19 +6,12 @@ import threading
 import serial
 from time import *
 
-port = serial.Serial("/dev/ttyACM0", baudrate=9600, timeout=3.0)
 
 def degToRad(stopnie):
 	return stopnie*math.pi/180
 
 def radToDeg(stopnie):
 	return stopnie*180/math.pi
-	
-def fiToPWM(stopnie):  
-	return 5/180*stopnie+5
-	
-def fi1ToPWM(stopnie):  
-	return 5/90*stopnie+5
 	
 def channelSetup(channel_XYZ, channel_JOINT):		
 	if GPIO.input(channel_XYZ) == GPIO.LOW:
@@ -28,8 +21,8 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Tryb: JOINT")
 		return 'JOINT'
 	else:
-		print("Domyslny tryb pracy: JOINT")
-		return 'JOINT'
+		print("Domyslny tryb pracy: XYZ")
+		return 'XYZ'
 	
 class NotacjaDH:
 
@@ -72,10 +65,6 @@ class Kinematyka:
 		
 		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
 		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
-			
-		serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
-		serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-		serwo3.ChangeDutyCycle(0)     #to musi byc regulowane
 		
 	def kinematykaProsta(self, fi1, fi3, d3):
 		try:
@@ -94,9 +83,9 @@ class Kinematyka:
 		self.Y = self.A[1][3]
 		self.Z = self.A[2][3]
 
-		print("X: %.4f" %self.X)
-		print("Y: %.4f" %self.Y)
-		print("Z: %.4f" %self.Z)
+		print("X: %.3f" %self.X)
+		print("Y: %.3f" %self.Y)
+		print("Z: %.3f" %self.Z)
 		
 	def kinematykaOdwrotna(self,X,Y,Z):
 		self.X = X
@@ -116,9 +105,9 @@ class Kinematyka:
 		self.fi1 = radToDeg(self.fi1)
 		self.fi3 = radToDeg(self.fi3)
 
-		print("fi1: %.4f" %self.fi1)
-		print("fi3: %.4f" %self.fi3)
-		print("d3: %.4f" %self.d3)
+		print("fi1: %.3f" %self.fi1)
+		print("fi3: %.3f" %self.fi3)
+		print("d3: %.3f" %self.d3)
 
 	def zakresCzlonow(self, kat1, kat3, dlugosc3, kat1_min, kat1_max, kat3_min, kat3_max, dlugosc3_min, dlugosc3_max):
 		if (kat1 < kat1_min) or (kat1 > kat1_max) or (kat3 < kat3_min) or (kat3 > kat3_max) or (dlugosc3 < dlugosc3_min) or (dlugosc3 > dlugosc3_max):
@@ -126,16 +115,16 @@ class Kinematyka:
 		else: return 1		#wartosc poprawna
 				
 	def sterowanieXYZ(self):
-		print("X: %.4f" %self.X )
-		print("Y: %.4f" %self.Y )
-		print("Z: %.4f" %self.Z )
+		print("X: %.3f" %self.X )
+		print("Y: %.3f" %self.Y )
+		print("Z: %.3f" %self.Z )
 		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
 				
 		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
-			self.fi1 = self.fi1_mem      #przywrocenie wspolrzednych z pamieci
+			self.fi1 = self.fi1_mem		 #przywrocenie wspolrzednych z pamieci
 			self.fi3 = self.fi3_mem
 			self.d3 = self.d3_mem
 			self.kinematykaProsta(self.fi1, self.fi3, self.d3)
@@ -143,24 +132,20 @@ class Kinematyka:
 		
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
+			threadSerial.sendData(self.fi1, self.fi3, self.d3)
 			print("Wyslano sygnaly sterujace")
-			self.ruch = 1
-			serwo1.ChangeDutyCycle(fiToPWM(self.fi1))
-			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-			#serwo3.ChangeDutyCycle(thread.start_new_thread(self.distance, (self.d3,)))
-			serwo3.ChangeDutyCycle(0)
 		
 	def sterowanieJOINT(self):
-		print("fi1: %.4f" %self.fi1)
-		print("fi3: %.4f" %self.fi3)
-		print("d3: %.4f" %self.d3)
+		print("fi1: %.3f" %self.fi1)
+		print("fi3: %.3f" %self.fi3)
+		print("d3: %.3f" %self.d3)
 		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
 		
 		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
-			self.X = self.X_mem          #przywrocenie wspolrzednych z pamieci
+			self.X = self.X_mem		#przywrocenie wspolrzednych z pamieci
 			self.Y = self.Y_mem
 			self.Z = self.Z_mem
 			self.kinematykaOdwrotna(self.X, self.Y, self.Z)
@@ -168,57 +153,26 @@ class Kinematyka:
 			
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
-			serwo1.ChangeDutyCycle(fi1ToPWM(self.fi1))
-			port.write(str(int(round(self.fi1))).encode('ascii'))
-			print("Wypelnienie dla fi1: %.4f" %fi1ToPWM(self.fi1))
-			serwo2.ChangeDutyCycle(fiToPWM(self.fi3))
-			print("Wypelnienie dla fi3: %.4f" %fiToPWM(self.fi3))
-			#serwo3.ChangeDutyCycle(0) 
+			threadSerial.sendData(self.fi1, self.fi3, self.d3)
 			print("Wyslano sygnaly sterujace")
 
 class NewThread(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
-		
-	def distance(self):	#dlugosc do przejechania
-		n = 5			#ilosc elementow do liczenia sredniej
-		total = 0
-		buffer = []
 
-		for i in range(0, n):
-			GPIO.output(GPIO_TRIGGER, True)
-			sleep(0.00001)					#0.01ms
-			GPIO.output(GPIO_TRIGGER, False)
-			StartTime = time()
-			StopTime = time()
-
-			while GPIO.input(GPIO_ECHO) == 0:
-				StartTime = time()
-
-			while GPIO.input(GPIO_ECHO) == 1:
-				StopTime = time()
-			TimeElapsed = StopTime - StartTime
-			distance = (TimeElapsed * 343000) / 2	#[mm]
-			buffer.append(distance)
-			total += buffer[i]
-			sleep(0.02)	#50Hz
-		return total/n
-	
 	def run(self):
-		while True:
-			d3_current = self.distance()
-						
-			while (d3_current > zuraw.d3 + 2) or (d3_current < zuraw.d3 - 2):
-				d3_current = self.distance()
-				if (d3_current > zuraw.d3 + 2):
-					serwo3.ChangeDutyCycle(1)
-				elif (d3_current < zuraw.d3 - 2):
-					serwo3.ChangeDutyCycle(10)	
-				else:
-					serwo3.ChangeDutyCycle(0)
-					print("Stop, odleglosc %.3f" %d3_current)
-	
-			
+		pass
+
+	def sendData(self, fi1, fi3, d3):
+		buffer = '\n'
+		fi1 = str(int(round(fi1*1000)))
+		fi3 = str(int(round(fi3*1000)))
+		d3 = str(int(round(d3*1000)))
+		buffer = fi1+'x'+fi3+'x'+d3+'\n';
+		port.write((buffer).encode('ascii'))
+		print("Poszlo: %s " %buffer)
+				
+				
 #GPIO PINOUT BCM
 GPIO_X_UP = 4
 GPIO_X_DOWN = 17
@@ -229,11 +183,6 @@ GPIO_Z_DOWN = 9
 GPIO_XYZ = 11
 GPIO_JOINT = 0
 GPIO_LED = 5
-GPIO_SERVO1 = 16
-GPIO_SERVO2 = 20
-GPIO_SERVO3 = 21
-GPIO_TRIGGER =  1	#czujnik odleglosci
-GPIO_ECHO = 7		#czujnik odleglosci
 
 #KONFIGURACJA WEJSC I WYJSC
 GPIO.setmode(GPIO.BCM)
@@ -246,17 +195,9 @@ GPIO.setup(GPIO_Z_UP, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z up
 GPIO.setup(GPIO_Z_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z down
 GPIO.setup(GPIO_XYZ, GPIO.IN, pull_up_down=GPIO.PUD_UP)			#sterowanie XYZ
 GPIO.setup(GPIO_JOINT, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#sterowanie JOINT
-GPIO.setup(GPIO_LED, GPIO.OUT)	    							#LED pozycji skrajnej
-GPIO.setup(GPIO_SERVO1, GPIO.OUT)								#serwo1: podstawa
-GPIO.setup(GPIO_SERVO2, GPIO.OUT)								#serwo2: ramie
-GPIO.setup(GPIO_SERVO3, GPIO.OUT)								#serwo3: 360 teleskop
-GPIO.setup(GPIO_TRIGGER, GPIO.OUT)								#czujnik odleglosci
-GPIO.setup(GPIO_ECHO, GPIO.IN)									#czujnik odleglosci
-
+GPIO.setup(GPIO_LED, GPIO.OUT)									#LED pozycji skrajnej
 dioda_alarm = GPIO.PWM(GPIO_LED, 1)
-serwo1 = GPIO.PWM(GPIO_SERVO1, 50)
-serwo2 = GPIO.PWM(GPIO_SERVO2, 50)
-serwo3 = GPIO.PWM(GPIO_SERVO3, 50)
+dioda_alarm.start(0)
 
 #PARAMETRY STARTOWE VAR
 fi1 = 0		#deg
@@ -269,27 +210,22 @@ l1 = 40		#mm
 l2 = 80		#mm
 l4 = 100	#mm
 
-#URUCHOMIENIE WYJSC
-dioda_alarm.start(0)
-serwo1.start(fi1ToPWM(fi1))	
-serwo1.ChangeDutyCycle(fi1ToPWM(fi1))	
-print("Wypelnienie dla fi1: %.4f" %fi1ToPWM(fi1))	
-serwo2.start(fiToPWM(fi3))
-serwo3.start(0)		#regulacja
+#PORT SZEREGOWY
+port = serial.Serial("/dev/arduino", baudrate=9600, timeout=2.0)
 
 #WARUNKI KRANCOWE
-fi1_min = -45	#deg
-fi1_max = 45	#deg
+fi1_min = -105	#deg
+fi1_max = 105	#deg
 fi3_min = 0		#deg
 fi3_max = 70	#deg
 d3_min = 40		#mm
-d3_max = 120	#mm
+d3_max = 160	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
 dx = 2		#mm
 dy = 2		#mm
 dz = 2 		#mm
-dfi1 = 10	#deg
+dfi1 = 2	#deg
 dfi3 = 2	#deg
 dd3 = 2		#mm
 dt = 0.2	#s
@@ -406,15 +342,15 @@ GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, boun
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
 zuraw = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
-threadDistance = NewThread()
-threadDistance.start()
+threadSerial = NewThread()
+threadSerial.start()
 sleep(1)
 print("\nNacisnij przycisk aby poruszac manipulatorem.")	
 	
 #PETLA GLOWNA PROGRAMU
 while True:
 	try: 		
-		terminate()		
+		sleep(0.5)
 	except: KeyboardInterrupt
 
 GPIO.cleanup()

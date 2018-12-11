@@ -1,17 +1,20 @@
 import serial
 from time import *
-port = serial.Serial("/dev/ttyACM16", baudrate=9600, timeout=2.0)
+port = serial.Serial("/dev/arduino", baudrate=9600, timeout=2.0)
 dane = 100
 i=0
 
 while True:
 	
-	if i<100:
-		i+=1
-	else: i=0
-	rcv = port.read(12)
-	print("Received data: %s" %rcv)
-	port.write(("9120123").encode('ascii'))
-	sleep(2)
-	port.write(("9090456").encode('ascii'))
-	sleep(2)
+	
+	buffer = "4567x7654x45678x" + '\n'
+	port.write((buffer).encode('ascii'))
+	print(port.readline())
+	print("Poszlo: %s " %buffer)
+	sleep(1)
+	
+	buffer = "2113x67877x86697x" + '\n'
+	port.write((buffer).encode('ascii'))
+	print(port.readline())
+	print("Poszlo: %s " %buffer)
+	sleep(1)

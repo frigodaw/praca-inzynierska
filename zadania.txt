@@ -1,4 +1,0 @@
-1) program interpoluj¹cy przebieg napiêcia od odleg³oœci i zapisanie danych w pliku
-2) funkcja przejœcia wychylenie-wype³nienie dla serwa1 i serwa2
-3) przycisk wybory trybu
-4) 

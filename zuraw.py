@@ -65,6 +65,8 @@ class Kinematyka:
 		
 		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
 		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
+		sleep(2)
+		threadSerial.sendData(self.fi1, self.fi3, self.d3)
 		
 	def kinematykaProsta(self, fi1, fi3, d3):
 		try:
@@ -96,7 +98,7 @@ class Kinematyka:
 		self.fi3_mem = self.fi3
 		self.d3_mem = self.d3
 
-		self.fi1 = math.atan2(self.Y,self.X)
+		self.fi1 = math.atan2(self.Y, self.X)
 		a = self.l2*math.cos(degToRad(self.fi2))
 		b = self.Z-self.l1-self.l2*math.sin(degToRad(self.fi2))
 		self.fi3 = math.pi/2-math.atan(self.X/(b*math.cos(self.fi1))-a/b)
@@ -133,7 +135,6 @@ class Kinematyka:
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
 			threadSerial.sendData(self.fi1, self.fi3, self.d3)
-			print("Wyslano sygnaly sterujace")
 		
 	def sterowanieJOINT(self):
 		print("fi1: %.3f" %self.fi1)
@@ -154,23 +155,40 @@ class Kinematyka:
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
 			threadSerial.sendData(self.fi1, self.fi3, self.d3)
-			print("Wyslano sygnaly sterujace")
 
 class NewThread(threading.Thread):
 	def __init__(self):
 		threading.Thread.__init__(self)
+		self.connectionLost = 0
 
-	def run(self):
-		pass
+	def run(self):	
+		while True:
+			try:
+				self.port = serial.Serial("/dev/arduino", baudrate=9600, timeout=3.0)
+				self.isConnected = 1
+				GPIO.output(GPIO_LED_G,	GPIO.HIGH)
+			except:
+				print("Nie mozna polaczyc z Arduino!")
+				self.isConnected = 0
+				self.connectionLost = 1
+				GPIO.output(GPIO_LED_G,	GPIO.LOW)
+			
+			if ((self.isConnected == 1) and (self.connectionLost == 1)):
+				sleep(3)
+				print("Przywrocono komunikacje szeregowa z Arduino!")
+				self.sendData(zuraw.fi1, zuraw.fi3, zuraw.d3)
+				self.connectionLost = 0
+			sleep(0.5)
 
 	def sendData(self, fi1, fi3, d3):
-		buffer = '\n'
-		fi1 = str(int(round(fi1*1000)))
-		fi3 = str(int(round(fi3*1000)))
-		d3 = str(int(round(d3*1000)))
-		buffer = fi1+'x'+fi3+'x'+d3+'\n';
-		port.write((buffer).encode('ascii'))
-		print("Poszlo: %s " %buffer)
+		if (self.isConnected == 1):
+			buffer = '\n'
+			fi1 = str(int(round(fi1*1000)))
+			fi3 = str(int(round(fi3*1000)))
+			d3 = str(int(round(d3*1000)))
+			buffer = fi1+'x'+fi3+'x'+d3+'\n';
+			self.port.write((buffer).encode('ascii'))
+			print("Wyslano: %s " %buffer)
 				
 				
 #GPIO PINOUT BCM
@@ -182,7 +200,8 @@ GPIO_Z_UP = 10
 GPIO_Z_DOWN = 9
 GPIO_XYZ = 11
 GPIO_JOINT = 0
-GPIO_LED = 5
+GPIO_LED_G = 19
+GPIO_LED_Y = 26
 
 #KONFIGURACJA WEJSC I WYJSC
 GPIO.setmode(GPIO.BCM)
@@ -195,14 +214,15 @@ GPIO.setup(GPIO_Z_UP, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z up
 GPIO.setup(GPIO_Z_DOWN, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#kierunek Z down
 GPIO.setup(GPIO_XYZ, GPIO.IN, pull_up_down=GPIO.PUD_UP)			#sterowanie XYZ
 GPIO.setup(GPIO_JOINT, GPIO.IN, pull_up_down=GPIO.PUD_UP)		#sterowanie JOINT
-GPIO.setup(GPIO_LED, GPIO.OUT)									#LED pozycji skrajnej
-dioda_alarm = GPIO.PWM(GPIO_LED, 1)
+GPIO.setup(GPIO_LED_G, GPIO.OUT)								#LED komunikacja szeregowa
+GPIO.setup(GPIO_LED_Y, GPIO.OUT)								#LED pozycja skrajna
+dioda_alarm = GPIO.PWM(GPIO_LED_Y, 1)
 dioda_alarm.start(0)
 
 #PARAMETRY STARTOWE VAR
 fi1 = 0		#deg
 fi3 = 30	#deg
-d3 = 60 	#mm
+d3 = 100 	#mm
 
 #POZOSTALE WYMIARY CZLONOW
 fi2 = 120	#deg
@@ -211,29 +231,28 @@ l2 = 80		#mm
 l4 = 100	#mm
 
 #PORT SZEREGOWY
-port = serial.Serial("/dev/arduino", baudrate=9600, timeout=2.0)
 
 #WARUNKI KRANCOWE
-fi1_min = -80	#deg
-fi1_max = 80	#deg
-fi3_min = 0		#deg
-fi3_max = 70	#deg
-d3_min = 40		#mm
-d3_max = 160	#mm
+fi1_min = -85	#deg
+fi1_max = 85	#deg
+fi3_min = 10	#deg
+fi3_max = 75	#deg
+d3_min = 50		#mm
+d3_max = 180	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
 dx = 5		#mm
 dy = 5		#mm
 dz = 5 		#mm
-dfi1 = 5	#deg
-dfi3 = 5	#deg
+dfi1 = 2	#deg
+dfi3 = 2	#deg
 dd3 = 2		#mm
-dt = 0.2	#s
+dt = 0.15	#s
 btime = 200 #bouncetime ms
 
 #OBSLUGA PRZERWAN OD PRZYCISKOW
 def callback_upX_upF1(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch X+")
 			zuraw.X += dx
@@ -247,7 +266,7 @@ def callback_upX_upF1(channel):
 			sleep(dt)
 
 def callback_downX_downF1(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch X-")
 			zuraw.X -= dx
@@ -262,7 +281,7 @@ def callback_downX_downF1(channel):
 		
 	
 def callback_upY_upF3(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Y+")
 			zuraw.Y += dy
@@ -276,7 +295,7 @@ def callback_upY_upF3(channel):
 			sleep(dt)
 
 def callback_downY_downF3(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Y-")
 			zuraw.Y -= dy
@@ -290,7 +309,7 @@ def callback_downY_downF3(channel):
 			sleep(dt)
 	
 def callback_upZ_upD3(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Z+")
 			zuraw.Z += dz
@@ -304,7 +323,7 @@ def callback_upZ_upD3(channel):
 			sleep(dt)
 
 def callback_downZ_downD3(channel):
-	while GPIO.input(channel) == GPIO.LOW:
+	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
 		if zuraw.tryb_pracy == 'XYZ':
 			print("\nRuch Z-")
 			zuraw.Z -= dz
@@ -339,18 +358,19 @@ GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, boun
 
 	
 #POCZATEK WYKONYWANEGO PROGRAMU
+threadSerial = NewThread()
+threadSerial.start()
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
 zuraw = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
-threadSerial = NewThread()
-threadSerial.start()
-sleep(1)
-print("\nNacisnij przycisk aby poruszac manipulatorem.")	
+print("Nacisnij przycisk aby poruszac manipulatorem.")	
+
+
 	
 #PETLA GLOWNA PROGRAMU
 while True:
 	try: 		
-		pass
+		sleep(0.5)
 	except: KeyboardInterrupt
 
 GPIO.cleanup()

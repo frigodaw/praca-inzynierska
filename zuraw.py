@@ -1,17 +1,17 @@
-import numpy as np				#biblioteka macierzy
 import math
+import numpy as np			
 import RPi.GPIO as GPIO
+import serial
 import sys
 import threading
-import serial
 from time import *
 
 
-def degToRad(stopnie):
-	return stopnie*math.pi/180
+def degToRad(deg):
+	return deg*math.pi/180
 
-def radToDeg(stopnie):
-	return stopnie*180/math.pi
+def radToDeg(rad):
+	return rad*180/math.pi
 	
 def channelSetup(channel_XYZ, channel_JOINT):		
 	if GPIO.input(channel_XYZ) == GPIO.LOW:
@@ -21,10 +21,10 @@ def channelSetup(channel_XYZ, channel_JOINT):
 		print("Tryb: JOINT")
 		return 'JOINT'
 	else:
-		print("Domyslny tryb pracy: JOINT")
-		return 'JOINT'
+		print("Domyslny tryb pracy: XYZ")
+		return 'XYZ'
 	
-class NotacjaDH:
+class ParametersDH:
 
 	def __init__(self,fi,d,a,alfa):
 		self.fi = degToRad(fi)
@@ -51,9 +51,9 @@ class NotacjaDH:
 		self.rX = np.array([[1,0,0,0], [0,math.cos(self.alfa),-math.sin(self.alfa),0], [0,math.sin(self.alfa),math.cos(self.alfa),0], [0,0,0,1]])
 
 		
-class Kinematyka:
+class Kinematics:
 	
-	def __init__(self, fi1, fi2, fi3, l1, l2, d3, l4, tryb_pracy):
+	def __init__(self, fi1, fi2, fi3, l1, l2, d3, l4, operating_mode):
 		self.fi1 = fi1
 		self.fi2 = fi2
 		self.fi3 = fi3
@@ -61,24 +61,24 @@ class Kinematyka:
 		self.l2 = l2
 		self.d3 = d3
 		self.l4 = l4
-		self.tryb_pracy = tryb_pracy
+		self.operating_mode = operating_mode
 		
-		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
-		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
+		self.forwardKinematics(self.fi1, self.fi3, self.d3)
+		self.inverseKinematics(self.X, self.Y, self.Z)
 		sleep(2)
 		threadSerial.sendData(self.fi1, self.fi3, self.d3)
 		
-	def kinematykaProsta(self, fi1, fi3, d3):
+	def forwardKinematics(self, fi1, fi3, d3):
 		try:
 			self.X_mem = self.X		#kopia zapasowa wspolrzednych XYZ
 			self.Y_mem = self.Y
 			self.Z_mem = self.Z
 		except: AttributeError
 		
-		czlon1 = NotacjaDH(fi1, self.l1, 0, 90)
-		czlon2 = NotacjaDH(self.fi2, 0, self.l2, 0)
-		czlon3 = NotacjaDH(-(self.fi2-fi3), 0, d3+self.l4, 0)
-		czlon4 = NotacjaDH(-90, 0, 0, -90)
+		czlon1 = ParametersDH(fi1, self.l1, 0, 90)
+		czlon2 = ParametersDH(self.fi2, 0, self.l2, 0)
+		czlon3 = ParametersDH(-(self.fi2-fi3), 0, d3+self.l4, 0)
+		czlon4 = ParametersDH(-90, 0, 0, -90)
 						
 		self.A = (((czlon1.A).dot(czlon2.A)).dot(czlon3.A)).dot(czlon4.A)
 		self.X = self.A[0][3]
@@ -89,7 +89,7 @@ class Kinematyka:
 		print("Y: %.3f" %self.Y)
 		print("Z: %.3f" %self.Z)
 		
-	def kinematykaOdwrotna(self,X,Y,Z):
+	def inverseKinematics(self,X,Y,Z):
 		self.X = X
 		self.Y = Y
 		self.Z = Z
@@ -111,46 +111,46 @@ class Kinematyka:
 		print("fi3: %.3f" %self.fi3)
 		print("d3: %.3f" %self.d3)
 
-	def zakresCzlonow(self, kat1, kat3, dlugosc3, kat1_min, kat1_max, kat3_min, kat3_max, dlugosc3_min, dlugosc3_max):
-		if (kat1 < kat1_min) or (kat1 > kat1_max) or (kat3 < kat3_min) or (kat3 > kat3_max) or (dlugosc3 < dlugosc3_min) or (dlugosc3 > dlugosc3_max):
+	def checkRange(self, angle_1, angle_3, length_3, angle_1_min, angle_1_max, angle_3_min, angle_3_max, length_3_min, length_3_max):
+		if (angle_1 < angle_1_min) or (angle_1 > angle_1_max) or (angle_3 < angle_3_min) or (angle_3 > angle_3_max) or (length_3 < length_3_min) or (length_3 > length_3_max):
 			return -1		#przekroczenie wartosci
 		else: return 1		#wartosc poprawna
 				
-	def sterowanieXYZ(self):
+	def controlXYZ(self):
 		print("X: %.3f" %self.X )
 		print("Y: %.3f" %self.Y )
 		print("Z: %.3f" %self.Z )
-		self.kinematykaOdwrotna(self.X, self.Y, self.Z)
+		self.inverseKinematics(self.X, self.Y, self.Z)
 				
-		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
+		if self.checkRange(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
 			self.fi1 = self.fi1_mem		 #przywrocenie wspolrzednych z pamieci
 			self.fi3 = self.fi3_mem
 			self.d3 = self.d3_mem
-			self.kinematykaProsta(self.fi1, self.fi3, self.d3)
-			self.kinematykaOdwrotna(self.X, self.Y, self.Z)
+			self.forwardKinematics(self.fi1, self.fi3, self.d3)
+			self.inverseKinematics(self.X, self.Y, self.Z)
 		
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
 			threadSerial.sendData(self.fi1, self.fi3, self.d3)
 		
-	def sterowanieJOINT(self):
+	def controlJOINT(self):
 		print("fi1: %.3f" %self.fi1)
 		print("fi3: %.3f" %self.fi3)
 		print("d3: %.3f" %self.d3)
-		self.kinematykaProsta(self.fi1, self.fi3, self.d3)
+		self.forwardKinematics(self.fi1, self.fi3, self.d3)
 		
-		if self.zakresCzlonow(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
+		if self.checkRange(self.fi1, self.fi3, self.d3, fi1_min, fi1_max, fi3_min, fi3_max, d3_min, d3_max) == -1:	#przekroczono wartosci katow
 			dioda_alarm.ChangeDutyCycle(50)
 			print("Przekroczono wartosci czlonow")
 			print("Nie wyslano sygnalow sterujacych")
 			self.X = self.X_mem		#przywrocenie wspolrzednych z pamieci
 			self.Y = self.Y_mem
 			self.Z = self.Z_mem
-			self.kinematykaOdwrotna(self.X, self.Y, self.Z)
-			self.kinematykaProsta(self.fi1, self.fi3, self.d3)
+			self.inverseKinematics(self.X, self.Y, self.Z)
+			self.forwardKinematics(self.fi1, self.fi3, self.d3)
 			
 		else: 
 			dioda_alarm.ChangeDutyCycle(0)
@@ -230,120 +230,118 @@ l1 = 40		#mm
 l2 = 80		#mm
 l4 = 100	#mm
 
-#PORT SZEREGOWY
-
 #WARUNKI KRANCOWE
 fi1_min = -85	#deg
 fi1_max = 85	#deg
 fi3_min = 10	#deg
 fi3_max = 75	#deg
-d3_min = 50		#mm
+d3_min = 70		#mm
 d3_max = 180	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
 dx = 5		#mm
 dy = 5		#mm
 dz = 5 		#mm
-dfi1 = 2	#deg
-dfi3 = 2	#deg
-dd3 = 2		#mm
+dfi1 = 5	#deg
+dfi3 = 5	#deg
+dd3 = 5		#mm
 dt = 0.15	#s
 btime = 200 #bouncetime ms
 
 #OBSLUGA PRZERWAN OD PRZYCISKOW
 def callback_upX_upF1(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch X+")
 			zuraw.X += dx
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch fi1+")
 			zuraw.fi1 += dfi1
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)
 
 def callback_downX_downF1(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch X-")
 			zuraw.X -= dx
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch fi1-")
 			zuraw.fi1 -= dfi1
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)
 		
 	
 def callback_upY_upF3(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch Y+")
 			zuraw.Y += dy
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch fi3+")
 			zuraw.fi3 += dfi3
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)
 
 def callback_downY_downF3(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch Y-")
 			zuraw.Y -= dy
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch fi3-")
 			zuraw.fi3 -= dfi3
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)
 	
 def callback_upZ_upD3(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch Z+")
 			zuraw.Z += dz
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch d3+")
 			zuraw.d3 += dd3
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)
 
 def callback_downZ_downD3(channel):
 	while (GPIO.input(channel) == GPIO.LOW) and (threadSerial.isConnected == 1):
-		if zuraw.tryb_pracy == 'XYZ':
+		if zuraw.operating_mode == 'XYZ':
 			print("\nRuch Z-")
 			zuraw.Z -= dz
-			zuraw.sterowanieXYZ()
+			zuraw.controlXYZ()
 			sleep(dt)
 		
-		elif zuraw.tryb_pracy == 'JOINT':
+		elif zuraw.operating_mode == 'JOINT':
 			print("\nRuch d3-")
 			zuraw.d3 -= dd3
-			zuraw.sterowanieJOINT()
+			zuraw.controlJOINT()
 			sleep(dt)	
 
 def callbackModeXYZ(channel):
-	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.tryb_pracy == 'JOINT'):
-		zuraw.tryb_pracy = 'XYZ'	
+	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.operating_mode == 'JOINT'):
+		zuraw.operating_mode = 'XYZ'	
 		print("Tryb pracy: XYZ")	
 
 def callbackModeJOINT(channel):
-	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.tryb_pracy == 'XYZ'):
-		zuraw.tryb_pracy = 'JOINT'
+	if (GPIO.input(channel) == GPIO.LOW) and (zuraw.operating_mode == 'XYZ'):
+		zuraw.operating_mode = 'JOINT'
 		print("Tryb pracy: JOINT")
 
 #KONFIGURACJA PRZERWAN
@@ -362,7 +360,7 @@ threadSerial = NewThread()
 threadSerial.start()
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
 print("START:")
-zuraw = Kinematyka(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
+zuraw = Kinematics(fi1,fi2,fi3,l1,l2,d3,l4, channelSetup(11,0))
 print("Nacisnij przycisk aby poruszac manipulatorem.")	
 
 

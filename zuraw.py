@@ -98,7 +98,7 @@ class Kinematics:
 		self.fi3_mem = self.fi3
 		self.d3_mem = self.d3
 
-		self.fi1 = math.atan2(self.Y, self.X)
+		self.fi1 = math.atan(self.Y/ self.X)
 		a = self.l2*math.cos(degToRad(self.fi2))
 		b = self.Z-self.l1-self.l2*math.sin(degToRad(self.fi2))
 		self.fi3 = math.pi/2-math.atan(self.X/(b*math.cos(self.fi1))-a/b)
@@ -225,27 +225,27 @@ fi3 = 30	#deg
 d3 = 100 	#mm
 
 #POZOSTALE WYMIARY CZLONOW
-fi2 = 120	#deg
-l1 = 40		#mm
-l2 = 80		#mm
-l4 = 100	#mm
+fi2 = 150	#deg
+l1 = 0		#mm
+l2 = 135	#mm
+l4 = 175	#mm
 
 #WARUNKI KRANCOWE
 fi1_min = -85	#deg
 fi1_max = 85	#deg
 fi3_min = 10	#deg
 fi3_max = 75	#deg
-d3_min = 70		#mm
-d3_max = 180	#mm
+d3_min = 60		#mm
+d3_max = 165	#mm
 	
 #PARAMETRY NARASTANIA WSPOLRZEDNYCH
-dx = 5		#mm
-dy = 5		#mm
-dz = 5 		#mm
-dfi1 = 5	#deg
-dfi3 = 5	#deg
-dd3 = 5		#mm
-dt = 0.15	#s
+dx = 3		#mm
+dy = 3		#mm
+dz = 3 		#mm
+dfi1 = 3	#deg
+dfi3 = 3	#deg
+dd3 = 3		#mm
+dt = 0.1	#s
 btime = 200 #bouncetime ms
 
 #OBSLUGA PRZERWAN OD PRZYCISKOW
@@ -355,7 +355,7 @@ GPIO.add_event_detect(GPIO_XYZ, GPIO.FALLING, callback=callbackModeXYZ, bounceti
 GPIO.add_event_detect(GPIO_JOINT, GPIO.FALLING, callback=callbackModeJOINT, bouncetime=btime)
 
 	
-#POCZATEK WYKONYWANEGO PROGRAMU
+#UTWORZENIE OBIEKTOW
 threadSerial = NewThread()
 threadSerial.start()
 print("\nPozycja startowa. Na podstawie wymiarow geometrycznych obliczane jest polozenie efektora (kinematyka prosta).\n")
@@ -365,7 +365,7 @@ print("Nacisnij przycisk aby poruszac manipulatorem.")
 
 
 	
-#PETLA GLOWNA PROGRAMU
+#ZAPETLENIE PROGRAMU
 while True:
 	try: 		
 		sleep(0.5)
